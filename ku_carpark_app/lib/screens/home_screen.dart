@@ -191,7 +191,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Text('ทะเบียน: ${myActiveBooking!.plateNumber}'),
                     Text(
                       'เวลาเข้า: ${DateFormat('HH:mm').format(
-                        myActiveBooking!.entryTime,
+                        myActiveBooking/**!**/.entryTime,
                       )}',
                     ),
                     const SizedBox(height: 10),

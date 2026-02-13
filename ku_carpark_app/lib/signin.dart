@@ -11,11 +11,11 @@ class SigninPage extends StatelessWidget {
         EmailAuthProvider(),
       ],
       actions: [
-        // Triggers when a new account is registered
+        
         AuthStateChangeAction<UserCreated>((context, state) {
           Navigator.pushReplacementNamed(context, '/home');
         }),
-        // IMPORTANT: Triggers when an existing user logs in
+        
         AuthStateChangeAction<SignedIn>((context, state) {
           Navigator.pushReplacementNamed(context, '/home');
         }),
