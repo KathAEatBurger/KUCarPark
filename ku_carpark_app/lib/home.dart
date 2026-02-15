@@ -4,6 +4,10 @@ import 'package:geolocator/geolocator.dart';
 import 'package:ku_carpark_app/profile_detail.dart';
 import 'package:ku_carpark_app/settings_page.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'screens/user_dashboard.dart';
+import 'screens/admin_dashboard.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -177,8 +181,45 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _onItemTapped(int index) {
+  void _onItemTapped(int index) async {
     setState(() { _selectedIndex = index; });
+
+    
+    if (index == 2) {
+      
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      if (doc.exists) {
+        String role = doc.get('role');
+
+        
+        Widget targetPage;
+        if (role == 'admin') {
+          targetPage = const AdminDashboard();
+        } else {
+          targetPage = const UserDashboard();
+        }
+
+        
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => targetPage),
+          ).then((_) {
+            
+            setState(() { _selectedIndex = 0; });
+          });
+        }
+      }
+    }
+
     if (index == 3) {
       Navigator.push(
         context,

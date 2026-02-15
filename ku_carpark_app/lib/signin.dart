@@ -1,6 +1,7 @@
 import 'package:firebase_ui_auth/firebase_ui_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_ui_oauth_google/firebase_ui_oauth_google.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SigninPage extends StatelessWidget {
   const SigninPage({super.key});
@@ -14,12 +15,21 @@ class SigninPage extends StatelessWidget {
       ],
       actions: [
         
-        AuthStateChangeAction<UserCreated>((context, state) {
-          Navigator.pushReplacementNamed(context, '/home');
+        AuthStateChangeAction<UserCreated>((context, state) async {
+          final user = state.credential.user;
+          if (user != null) {
+            await _initializeUserData(user);
+          }
+          if (context.mounted) Navigator.pushReplacementNamed(context, '/home');
         }),
         
-        AuthStateChangeAction<SignedIn>((context, state) {
-          Navigator.pushReplacementNamed(context, '/home');
+        
+        AuthStateChangeAction<SignedIn>((context, state) async {
+          final user = state.user;
+          if (user != null) {
+            await _initializeUserData(user); 
+          }
+          if (context.mounted) Navigator.pushReplacementNamed(context, '/home');
         }),
       ],
       headerBuilder: (context, constraints, shrinkOffset) {
@@ -27,9 +37,7 @@ class SigninPage extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           child: AspectRatio(
             aspectRatio: 1,
-            child: Image.asset(
-              'assets/images/kucarpark_logo.jpg',
-            ),
+            child: Image.asset('assets/images/kucarpark_logo.jpg'),
           ),
         );
       },
@@ -37,10 +45,25 @@ class SigninPage extends StatelessWidget {
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 8.0),
           child: action == AuthAction.signIn
-              ? const Text('Welcome to Firebase Auth! Please log in.')
+              ? const Text('Welcome to KU Carpark! Please log in.')
               : const Text('New here? Create an account to get started!'),
         );
       },
     );
+  }
+
+  
+  Future<void> _initializeUserData(dynamic user) async {
+    final userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
+    final docSnapshot = await userDoc.get();
+
+    if (!docSnapshot.exists) {
+      await userDoc.set({
+        'email': user.email,
+        'role': 'user',
+        'displayName': user.displayName ?? 'New User',
+        'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    }
   }
 }

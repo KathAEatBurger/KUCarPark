@@ -1,84 +1,113 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import '../utils/mock_data.dart';
-//import '../models/booking.dart';
-import 'login_screen.dart';
-import '../models/parking_spot.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-
-
-class AdminDashboard extends StatefulWidget {
+class AdminDashboard extends StatelessWidget {
   const AdminDashboard({super.key});
 
   @override
-  State<AdminDashboard> createState() => _AdminDashboardState();
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Admin Dashboard'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () => FirebaseAuth.instance.signOut(),
+          )
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: const [
+          Text('จัดการจำนวนที่จอด (จำลอง Sensor)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          SizedBox(height: 10),
+          ZoneManageWidget(),
+          Divider(height: 40),
+          Text('คำขอสมาชิกรายเดือน', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          SizedBox(height: 10),
+          MonthlyApprovalWidget(),
+        ],
+      ),
+    );
+  }
 }
 
-class _AdminDashboardState extends State<AdminDashboard> {
-  void _updateSpots(int change) {
-    if (parkingSpots.length + change < 0) return;
-    if (change > 0) {
-      int nextId = parkingSpots.length + 1;
-      parkingSpots.add(ParkingSpot(id: 'A-$nextId', zone: 'Zone A'));
-    } else {
-      if (parkingSpots.last.isOccupied) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ไม่สามารถลบล็อกที่มีรถจอดได้')));
-        return;
-      }
-      parkingSpots.removeLast();
-    }
-    setState(() {});
+class ZoneManageWidget extends StatelessWidget {
+  const ZoneManageWidget({super.key});
+
+  Future<void> _updateSpot(String docId, int newAvailable, int total) async {
+    if (newAvailable < 0) newAvailable = 0;
+    if (newAvailable > total) newAvailable = total;
+    await FirebaseFirestore.instance.collection('zones').doc(docId).update({'available': newAvailable});
   }
 
   @override
   Widget build(BuildContext context) {
-    final pendingBookings = bookings.where((b) => b.status == 'pending_payment').toList();
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Admin Dashboard'),
-        backgroundColor: Colors.red,
-        actions: [
-           IconButton(icon: const Icon(Icons.logout), onPressed: () { currentUser = null; Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen())); })
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('จัดการที่จอดรถ', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            Row(children: [
-              IconButton(onPressed: () => _updateSpots(-1), icon: const Icon(Icons.remove)),
-              Text('จำนวนปัจจุบัน: ${parkingSpots.length}', style: const TextStyle(fontSize: 18)),
-              IconButton(onPressed: () => _updateSpots(1), icon: const Icon(Icons.add)),
-            ]),
-            const Divider(height: 30),
-            const Text('ตรวจสอบสมาชิกรายเดือน', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            if (pendingBookings.isEmpty) const Text('ไม่มีรายการรอตรวจสอบ'),
-            ...pendingBookings.map((b) => Card(
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('zones').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const CircularProgressIndicator();
+        final zones = snapshot.data!.docs;
+        return Column(
+          children: zones.map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final total = data['total'] ?? 0;
+            final available = data['available'] ?? 0;
+            return Card(
               child: ListTile(
-                title: Text('ทะเบียน: ${b.plateNumber}'),
-                subtitle: Text('ส่งเมื่อ: ${DateFormat('HH:mm').format(b.entryTime)}'),
-                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                  IconButton(icon: const Icon(Icons.check, color: Colors.green), onPressed: () {
-                    setState(() {
-                      b.status = 'completed';
-                      final u = users.firstWhere((u) => u.plateNumber == b.plateNumber, orElse: () => users.last);
-                      u.isMonthlyMember = true;
-                    });
-                  }),
-                  IconButton(icon: const Icon(Icons.close, color: Colors.red), onPressed: () { setState(() { b.status = 'rejected'; }); }),
-                ]),
+                title: Text('โซน: ${data['name']}'),
+                subtitle: Text('ว่าง: $available / $total'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(icon: const Icon(Icons.remove), onPressed: () => _updateSpot(doc.id, available - 1, total)),
+                    IconButton(icon: const Icon(Icons.add), onPressed: () => _updateSpot(doc.id, available + 1, total)),
+                  ],
+                ),
               ),
-            )),
-            const Divider(height: 30),
-            const Text('รายงานปัญหาจากผู้ใช้', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            if (reports.isEmpty) const Text('ไม่มีรายงานปัญหา'),
-            ...reports.map((r) => Card(child: ListTile(title: Text(r.description), subtitle: Text(DateFormat('dd/MM/yyyy HH:mm').format(r.timestamp)), trailing: Chip(label: Text(r.status))))),
-          ],
-        ),
-      ),
+            );
+          }).toList(),
+        );
+      },
     );
+  }
+}
+
+class MonthlyApprovalWidget extends StatelessWidget {
+  const MonthlyApprovalWidget({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('monthly_requests').where('status', isEqualTo: 'pending').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const Text('ไม่มีคำขอรออนุมัติ');
+        final requests = snapshot.data!.docs;
+        if (requests.isEmpty) return const Text('ไม่มีคำขอรออนุมัติ');
+        return Column(
+          children: requests.map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            return Card(
+              child: ListTile(
+                title: Text('ทะเบียน: ${data['plate']}'),
+                subtitle: Text('เวลา: ${data['timestamp'].toDate()}'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(icon: const Icon(Icons.check, color: Colors.green), onPressed: () => _updateStatus(doc.id, 'approved')),
+                    IconButton(icon: const Icon(Icons.close, color: Colors.red), onPressed: () => _updateStatus(doc.id, 'rejected')),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+
+  Future<void> _updateStatus(String id, String status) async {
+    await FirebaseFirestore.instance.collection('monthly_requests').doc(id).update({'status': status});
   }
 }

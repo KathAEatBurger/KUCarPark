@@ -1,14 +1,30 @@
 import 'package:flutter/material.dart';
-import '../utils/mock_data.dart';
-import '../models/report.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-
-class ReportScreen extends StatelessWidget {
+class ReportScreen extends StatefulWidget {
   const ReportScreen({super.key});
 
   @override
+  State<ReportScreen> createState() => _ReportScreenState();
+}
+
+class _ReportScreenState extends State<ReportScreen> {
+  final _issueController = TextEditingController();
+
+  Future<void> _sendReport() async {
+    if (_issueController.text.isEmpty) return;
+    await FirebaseFirestore.instance.collection('reports').add({
+      'description': _issueController.text,
+      'timestamp': DateTime.now(),
+      'userId': FirebaseAuth.instance.currentUser?.uid,
+    });
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ส่งรายงานปัญหาเรียบร้อย')));
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final controller = TextEditingController();
     return Scaffold(
       appBar: AppBar(title: const Text('รายงานปัญหา')),
       body: Padding(
@@ -16,22 +32,18 @@ class ReportScreen extends StatelessWidget {
         child: Column(
           children: [
             TextField(
-              controller: controller,
+              controller: _issueController,
               maxLines: 5,
-              decoration: const InputDecoration(labelText: 'รายละเอียดปัญหา', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                labelText: 'รายละเอียดปัญหา',
+                border: OutlineInputBorder(),
+              ),
             ),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  reports.add(Report(id: DateTime.now().toString(), description: controller.text, timestamp: DateTime.now(), status: 'submitted'));
-                  controller.clear();
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ส่งรายงานเรียบร้อย')));
-                },
-                child: const Text('ส่งรายงาน'),
-              ),
-            )
+              child: ElevatedButton(onPressed: _sendReport, child: const Text('ส่งรายงาน')),
+            ),
           ],
         ),
       ),
