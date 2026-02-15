@@ -1,5 +1,6 @@
 import 'package:firebase_ui_auth/firebase_ui_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_ui_oauth_google/firebase_ui_oauth_google.dart';
 
 class SigninPage extends StatelessWidget {
   const SigninPage({super.key});
@@ -9,6 +10,7 @@ class SigninPage extends StatelessWidget {
     return SignInScreen(
       providers: [
         EmailAuthProvider(),
+        GoogleProvider(clientId: "59601837642-h7p8aseudpgjleqjllqr3bnpgfeoft0b.apps.googleusercontent.com"),
       ],
       actions: [
         
@@ -26,7 +28,7 @@ class SigninPage extends StatelessWidget {
           child: AspectRatio(
             aspectRatio: 1,
             child: Image.asset(
-              'assets/images/flutterfire_300x.png',
+              'assets/images/kucarpark_logo.jpg',
             ),
           ),
         );
