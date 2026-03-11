@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:ku_carpark_app/about.dart'; // ✅ เพิ่ม import หน้า about
+import 'package:ku_carpark_app/about.dart'; // เพิ่ม import หน้า about
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
 
-  // ✅ ฟังก์ชันแสดง Dialog ยืนยันการออกจากระบบ
+  // ฟังก์ชันแสดง Dialog ยืนยันการออกจากระบบ
   void _showLogoutDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -35,7 +35,7 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
-  // ✅ ฟังก์ชันแสดง Dialog ยืนยันการลบบัญชี
+  // ฟังก์ชันแสดง Dialog ยืนยันการลบบัญชี
   void _showDeleteAccountDialog(BuildContext context) {
     final TextEditingController passwordController = TextEditingController();
     final user = FirebaseAuth.instance.currentUser;
@@ -196,7 +196,7 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
-  // ✅ ฟังก์ชันแสดง loading dialog
+  // ฟังก์ชันแสดง loading dialog
   void _showLoadingDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -243,7 +243,7 @@ class SettingsPage extends StatelessWidget {
           ),
           const Divider(),
           
-          // ✅ ปุ่ม Delete Account
+          // ปุ่ม Delete Account
           ListTile(
             leading: const Icon(Icons.delete_forever, color: Colors.red),
             title: const Text(
