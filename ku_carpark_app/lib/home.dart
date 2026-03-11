@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:ku_carpark_app/profile_detail.dart';
+import 'package:ku_carpark_app/review.dart';
 import 'package:ku_carpark_app/settings_page.dart';
+import 'package:ku_carpark_app/account.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'screens/user_dashboard.dart';
 import 'screens/admin_dashboard.dart';
+import 'reviewdashboard.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -23,6 +26,10 @@ class _HomePageState extends State<HomePage> {
   Set<Marker> _markers = {};
   Set<Polyline> _polylines = {};
   
+  // สำหรับค้นหา
+  final TextEditingController _searchController = TextEditingController();
+  List<DocumentSnapshot> _searchResults = [];
+  bool _isSearching = false;
   
   LatLng? _currentP; 
 
@@ -32,9 +39,87 @@ class _HomePageState extends State<HomePage> {
     _checkPermission();
     _getCurrentLocation();
     _addParkingMarkers();
+    
+    // เพิ่ม listener สำหรับการค้นหา
+    _searchController.addListener(_onSearchChanged);
   }
 
-  
+  @override
+  void dispose() {
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // เมื่อพิมพ์ค้นหา
+  void _onSearchChanged() {
+    if (_searchController.text.length > 1) {
+      _searchZones(_searchController.text);
+    } else {
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+      });
+    }
+  }
+
+  // ค้นหาสถานที่จาก Firestore
+  Future<void> _searchZones(String query) async {
+    setState(() {
+      _isSearching = true;
+    });
+
+    try {
+      // ค้นหาจากชื่อสถานที่ (ตัวพิมพ์เล็ก-ใหญ่ไม่สน)
+      final snapshot = await FirebaseFirestore.instance
+          .collection('zones')
+          .orderBy('name')
+          .get();
+
+      final results = snapshot.docs.where((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        final name = (data['name'] ?? '').toString().toLowerCase();
+        return name.contains(query.toLowerCase());
+      }).toList();
+
+      setState(() {
+        _searchResults = results;
+      });
+    } catch (e) {
+      print('Error searching zones: $e');
+    } finally {
+      setState(() {
+        _isSearching = false;
+      });
+    }
+  }
+
+  // เมื่อเลือกสถานที่จากผลการค้นหา
+  void _onSelectSearchResult(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    final name = data['name'] ?? 'ไม่ระบุชื่อ';
+    final lat = data['latitude'] ?? 13.8476;
+    final lng = data['longitude'] ?? 100.5696;
+    final position = LatLng(lat, lng);
+
+    // ซ่อนคีย์บอร์ด
+    FocusScope.of(context).unfocus();
+    
+    // เคลียร์ผลการค้นหา
+    setState(() {
+      _searchResults = [];
+      _searchController.clear();
+    });
+
+    // ซูมไปยังสถานที่ที่เลือก
+    mapController.animateCamera(
+      CameraUpdate.newLatLngZoom(position, 17.0),
+    );
+
+    // แสดง Bottom Sheet
+    _showParkingDetailSheet(name, position);
+  }
+
   Future<void> _getCurrentLocation() async {
     Position position = await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.high
@@ -44,14 +129,11 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  
   void _drawRoute(LatLng destination) async {
-    
     Position position = await Geolocator.getCurrentPosition();
     LatLng startPoint = LatLng(position.latitude, position.longitude);
 
     PolylinePoints polylinePoints = PolylinePoints();
-    
     
     PolylineResult result = await polylinePoints.getRouteBetweenCoordinates(
       googleApiKey: "AIzaSyCFMrCbuVOw7r-OYJxVzUrheJ4jPBUy51I",
@@ -64,7 +146,6 @@ class _HomePageState extends State<HomePage> {
 
     if (result.points.isNotEmpty) {
       List<LatLng> polylineCoordinates = [];
-      
       
       for (var point in result.points) {
         polylineCoordinates.add(LatLng(point.latitude, point.longitude));
@@ -84,6 +165,17 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  void _navigateToReviewDashboard(String parkingName, LatLng position) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ReviewDashboardPage(
+          parkingName: parkingName,
+          parkingLocation: position,
+        ),
+      ),
+    );
+  }
 
   void _showParkingDetailSheet(String title, LatLng position) {
     mapController.animateCamera(CameraUpdate.newLatLngZoom(position, 17.0));
@@ -121,6 +213,19 @@ class _HomePageState extends State<HomePage> {
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
                   ),
                 ),
+                const SizedBox(width: 10),
+
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _navigateToReviewDashboard(title, position);
+                    },
+                    icon: const Icon(Icons.rate_review, color: Colors.white),
+                    label: const Text("Review", style: TextStyle(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                  ),
+                )
               ],
             ),
           ],
@@ -131,7 +236,6 @@ class _HomePageState extends State<HomePage> {
 
   void _addParkingMarkers() {
     setState(() {
-      
       _markers.add(
         Marker(
           markerId: const MarkerId('parking_1'),
@@ -141,7 +245,6 @@ class _HomePageState extends State<HomePage> {
         ),
       );
 
-      
       _markers.add(
         Marker(
           markerId: const MarkerId('parking_2'),
@@ -151,7 +254,6 @@ class _HomePageState extends State<HomePage> {
         ),
       );
 
-      
       _markers.add(
         Marker(
           markerId: const MarkerId('parking_3'),
@@ -161,7 +263,6 @@ class _HomePageState extends State<HomePage> {
         ),
       );
 
-      
       _markers.add(
         Marker(
           markerId: const MarkerId('parking_4'),
@@ -173,7 +274,6 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  
   Future<void> _checkPermission() async {
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
@@ -184,13 +284,19 @@ class _HomePageState extends State<HomePage> {
   void _onItemTapped(int index) async {
     setState(() { _selectedIndex = index; });
 
+    if (index == 1) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const AccountPage()),
+      ).then((_) {
+        setState(() { _selectedIndex = 0; });
+      });
+    }
     
     if (index == 2) {
-      
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      
       final doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -199,7 +305,6 @@ class _HomePageState extends State<HomePage> {
       if (doc.exists) {
         String role = doc.get('role');
 
-        
         Widget targetPage;
         if (role == 'admin') {
           targetPage = const AdminDashboard();
@@ -207,13 +312,11 @@ class _HomePageState extends State<HomePage> {
           targetPage = const UserDashboard();
         }
 
-        
         if (mounted) {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => targetPage),
           ).then((_) {
-            
             setState(() { _selectedIndex = 0; });
           });
         }
@@ -248,6 +351,8 @@ class _HomePageState extends State<HomePage> {
             markers: _markers,
             polylines: _polylines,
           ),
+          
+          // Header
           Positioned(
             top: 50,
             left: 20,
@@ -274,24 +379,82 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
           ),
+          
+          // Search Bar
           Positioned(
             top: 110,
             left: 20,
             right: 20,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 15),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
-              ),
-              child: const TextField(
-                decoration: InputDecoration(
-                  hintText: 'Where are you going to?',
-                  border: InputBorder.none,
-                  icon: Icon(Icons.search, color: Colors.grey),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 15),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
+                  ),
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: 'ค้นหาที่จอดรถ...',
+                      border: InputBorder.none,
+                      icon: const Icon(Icons.search, color: Colors.grey),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 18),
+                              onPressed: () {
+                                setState(() {
+                                  _searchController.clear();
+                                  _searchResults = [];
+                                });
+                              },
+                            )
+                          : null,
+                    ),
+                  ),
                 ),
-              ),
+                
+                // แสดงผลการค้นหา
+                if (_searchResults.isNotEmpty || _isSearching)
+                  Container(
+                    margin: const EdgeInsets.only(top: 5),
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
+                    ),
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(context).size.height * 0.3,
+                    ),
+                    child: _isSearching
+                        ? const Center(child: CircularProgressIndicator())
+                        : ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: _searchResults.length,
+                            itemBuilder: (context, index) {
+                              final doc = _searchResults[index];
+                              final data = doc.data() as Map<String, dynamic>;
+                              final name = data['name'] ?? 'ไม่ระบุชื่อ';
+                              final address = data['address'] ?? '';
+                              final price = data['price'] ?? 0;
+                              
+                              return ListTile(
+                                leading: const Icon(Icons.local_parking, color: Colors.teal),
+                                title: Text(
+                                  name,
+                                  style: const TextStyle(fontWeight: FontWeight.w500),
+                                ),
+                                subtitle: address.isNotEmpty
+                                    ? Text(address, maxLines: 1, overflow: TextOverflow.ellipsis)
+                                    : Text('ราคา $price บาท/ชั่วโมง'),
+                                onTap: () => _onSelectSearchResult(doc),
+                              );
+                            },
+                          ),
+                  ),
+              ],
             ),
           ),
         ],
@@ -303,8 +466,8 @@ class _HomePageState extends State<HomePage> {
         onTap: _onItemTapped,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: ''),
-          BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet), label: ''),
-          BottomNavigationBarItem(icon: Icon(Icons.pie_chart), label: ''),
+          BottomNavigationBarItem(icon: Icon(Icons.email), label: ''),
+          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: ''),
           BottomNavigationBarItem(icon: Icon(Icons.settings), label: ''),
         ],
       ),
